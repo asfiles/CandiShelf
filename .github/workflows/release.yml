@@ -1,0 +1,270 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+# Required to create the GitHub Release and upload its assets.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64 (portable)
+            os: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+            rust_targets: x86_64-pc-windows-msvc
+            asset: candishelf-Windows-x64.exe
+            artifact: candishelf-Windows-x64-build
+
+          # One universal build: the Tauri CLI lipo-merges the two per-arch
+          # slices into a single .app that runs on Intel and Apple Silicon.
+          - name: macOS Universal (Intel + Apple Silicon)
+            os: macos-latest
+            rust_target: universal-apple-darwin
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+            asset: candishelf-macOS-Universal.zip
+            artifact: candishelf-macOS-Universal-build
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.rust_target }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Building version $VERSION (tag $GITHUB_REF_NAME)"
+          npm run set-version -- "$VERSION"
+
+      # Windows ships as a single portable executable: build the binary only,
+      # with no installer/bundle step.
+      - name: Build portable executable (Windows)
+        if: matrix.os == 'windows-latest'
+        run: npm run tauri build -- --target ${{ matrix.rust_target }} --no-bundle
+
+      # macOS ships as one universal .app (Intel + Apple Silicon), ad-hoc signed
+      # and packed with `ditto` below into a single portable archive.
+      - name: Build universal app bundle (macOS)
+        if: matrix.os == 'macos-latest'
+        run: npm run tauri build -- --target universal-apple-darwin --bundles app
+
+      # tauri writes to src-tauri/target/<triple>/release (not target/release)
+      # whenever an explicit `--target` is passed, so resolve paths per target.
+      - name: Collect the release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RELEASE_DIR="src-tauri/target/${{ matrix.rust_target }}/release"
+          ASSET="${{ matrix.asset }}"
+
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            BIN="$RELEASE_DIR/candishelf.exe"
+            echo "Looking for the portable executable:"
+            ls -la "$RELEASE_DIR"
+            test -f "$BIN"
+            cp "$BIN" "$ASSET"
+          else
+            APP_DIR="$RELEASE_DIR/bundle/macos"
+            echo "Contents of $APP_DIR:"
+            ls -la "$APP_DIR"
+
+            APP=$(find "$APP_DIR" -maxdepth 1 -type d -name "*.app" -print -quit)
+            if [ -z "$APP" ]; then
+              echo "ERROR: macOS .app bundle not found in $APP_DIR"
+              exit 1
+            fi
+
+            # No Developer ID is configured, so sign ad-hoc. A downloaded app
+            # with no *bundle* signature is reported by Gatekeeper as "damaged";
+            # an ad-hoc signature replaces that with a one-time "unidentified
+            # developer" prompt the user can allow. (Installer-free distribution
+            # cannot avoid that prompt without Developer ID + notarization.)
+            codesign --force --deep --sign - --timestamp=none "$APP"
+            codesign --verify --deep --verbose=2 "$APP"
+
+            # One download must run on both architectures: assert the two slices
+            # really were merged by the universal build.
+            BIN=$(find "$APP/Contents/MacOS" -maxdepth 1 -type f -print -quit)
+            ARCHS=$(lipo -archs "$BIN")
+            echo "Architectures: $ARCHS"
+            case "$ARCHS" in
+              *x86_64*arm64*|*arm64*x86_64*) ;;
+              *) echo "ERROR: expected a universal binary, got: $ARCHS"; exit 1 ;;
+            esac
+
+            # `ditto` (unlike `zip`) preserves permissions, symlinks and extended
+            # attributes, keeping the code signature valid. `--keepParent` puts
+            # CandiShelf.app at the archive root, so the user gets a ready-to-open
+            # app right after unzipping — one download, no nested archives.
+            ASSET_PATH="$(pwd)/$ASSET"
+            ( cd "$APP_DIR" && ditto -c -k --sequesterRsrc --keepParent \
+                "$(basename "$APP")" "$ASSET_PATH" )
+
+            # The user must get CandiShelf.app straight from this one archive —
+            # guard against a nested-folder layout.
+            unzip -Z1 "$ASSET_PATH" | grep -q '^CandiShelf\.app/'
+            echo "Archive root contains CandiShelf.app"
+          fi
+
+          echo "===== release asset ====="
+          ls -lh "$ASSET"
+
+      - name: Upload the release asset
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    name: Checksums & publish
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          NOTES=$(awk -v ver="$VERSION" '
+            index($0, "## [" ver "]") == 1 { flag=1; next }
+            /^## \[/ { flag=0 }
+            flag { print }
+          ' CHANGELOG.md)
+
+          cat > dist/RELEASE_NOTES.md <<'HEADER'
+          Local, offline-first resume shelf. Download the portable file for your
+          platform — no installer, no terminal, no Docker, no Python, no API key.
+
+          Verify the checksum against `SHA256SUMS.txt`, then run:
+
+          | Platform | File |
+          | --- | --- |
+          | Windows 10/11 x64 | `candishelf-Windows-x64.exe` |
+          | macOS (Intel + Apple Silicon) | `candishelf-macOS-Universal.zip` |
+
+          Windows runs directly from the `.exe`. The macOS `.zip` unpacks straight
+          to `CandiShelf.app` — unzip it and open the app. The app is not
+          notarized, so on first launch Gatekeeper asks once; allow it via
+          **System Settings → Privacy & Security → Open Anyway** (or right-click
+          the app → **Open**). AI models are downloaded on first launch
+          (checksum-verified). After that, everything works offline.
+          HEADER
+
+          {
+            echo
+            if [ -n "$NOTES" ]; then
+              echo "## What's changed"
+              echo
+              echo "$NOTES"
+            else
+              echo "See [CHANGELOG.md](CHANGELOG.md) for details."
+            fi
+          } >> dist/RELEASE_NOTES.md
+
+          echo "===== RELEASE NOTES ====="
+          cat dist/RELEASE_NOTES.md
+
+      - name: Compute SHA-256 checksums
+        working-directory: dist
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          : > SHA256SUMS.txt
+          for f in candishelf-*; do
+            [ -f "$f" ] || continue
+            sha256sum "$f" >> SHA256SUMS.txt
+          done
+
+          echo "===== SHA256SUMS.txt ====="
+          cat SHA256SUMS.txt
+
+          # Every supported platform must have produced its asset.
+          for expected in \
+            candishelf-Windows-x64.exe \
+            candishelf-macOS-Universal.zip; do
+            if [ ! -f "$expected" ]; then
+              echo "ERROR: missing release asset: $expected"
+              exit 1
+            fi
+          done
+
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${GITHUB_REF_NAME}"
+
+          # Re-running a failed workflow must not trip over a leftover draft.
+          if gh release view "$TAG" --json isDraft -q .isDraft 2>/dev/null | grep -q true; then
+            echo "Deleting the previous draft release for $TAG"
+            gh release delete "$TAG" --yes
+          fi
+
+          mapfile -t ASSETS < <(
+            find dist -maxdepth 1 -type f \
+              \( -name 'candishelf-*' -o -name 'SHA256SUMS.txt' \) | sort
+          )
+          if [ "${#ASSETS[@]}" -lt 2 ]; then
+            echo "ERROR: no release assets were downloaded"
+            exit 1
+          fi
+
+          echo "Publishing assets:"
+          printf '  %s\n' "${ASSETS[@]}"
+
+          gh release create "$TAG" \
+            --title "CandiShelf $TAG" \
+            --notes-file dist/RELEASE_NOTES.md \
+            --draft \
+            "${ASSETS[@]}"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${GITHUB_REF_NAME}" --draft=false

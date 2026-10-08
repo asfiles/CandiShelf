@@ -1,0 +1,169 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: CI only needs to read the repository.
+permissions:
+  contents: read
+
+jobs:
+  supply-chain:
+    name: Supply chain (audit · pinned versions)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      # `npm ci` performs a clean, reproducible install from the committed
+      # lockfile. `ignore-scripts=true` (.npmrc) prevents dependency install
+      # scripts from running during this step.
+      - name: Install dependencies (no scripts)
+        run: npm ci
+
+      - name: Verify no floating dependency ranges
+        run: |
+          node -e '
+            const p = require("./package.json");
+            const semver = /^\d+\.\d+\.\d+([-+].+)?$/;
+            const bad = [];
+            for (const [name, range] of Object.entries({ ...p.dependencies, ...p.devDependencies })) {
+              if (!semver.test(range)) bad.push(`${name}: ${range}`);
+            }
+            if (bad.length) {
+              console.error("Dependencies must be pinned to exact versions:\n" + bad.join("\n"));
+              process.exit(1);
+            }
+            console.log("All dependencies are pinned to exact versions.");
+          '
+
+      - name: Audit production dependencies (fail on high/critical)
+        # Only runtime dependencies ship in the app; these must be clean.
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit all dependencies (advisory)
+        # Dev-only tooling (vite/vitest/esbuild dev server) advisories are
+        # reported but do not block CI, since they never ship in the binary.
+        run: npm audit
+        continue-on-error: true
+
+  frontend:
+    name: Frontend (lint · typecheck · test · build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        # Clean, reproducible install from the committed lockfile.
+        # `ignore-scripts=true` (.npmrc) blocks dependency install scripts.
+        run: npm ci
+
+      # Style check is advisory; tighten locally with `npm run lint`.
+      - name: Lint (advisory)
+        run: npx eslint . --ext .ts,.tsx
+        continue-on-error: true
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build
+
+  rust:
+    name: Rust (fmt · clippy · test)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # Formatting/lint are advisory; run `cargo fmt` / `cargo clippy` locally to tighten.
+      - name: Format check (advisory)
+        working-directory: src-tauri
+        run: cargo fmt --all --check
+        continue-on-error: true
+
+      - name: Clippy (advisory)
+        working-directory: src-tauri
+        run: cargo clippy --all-targets --no-default-features
+        continue-on-error: true
+
+      # Logic/unit tests run without the heavy candle ML tree (they use the
+      # deterministic lexical fallback). Real candle inference is compiled by the
+      # build-check job and validated by the `embed_cvs` example.
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test --no-default-features
+
+  build-check:
+    name: Verification build (${{ matrix.os }})
+    needs: [frontend, rust]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+          - os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Full build compiles the real candle embedder (default features).
+      - name: Build the app (debug, no bundle)
+        run: npm run tauri build -- --debug --no-bundle

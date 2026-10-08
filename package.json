@@ -1,0 +1,45 @@
+{
+  "name": "candishelf",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "CandiShelf — private candidate search powered by local AI. No accounts, API keys, or cloud processing; models download automatically. Local, offline-first resume shelf for independent recruiters and small teams.",
+  "license": "AGPL-3.0-or-later",
+  "author": "Tony (https://github.com/asfiles)",
+  "homepage": "https://github.com/asfiles/CandiShelf",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "set-version": "node scripts/set_version.mjs",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.0",
+    "@tauri-apps/plugin-dialog": "2.8.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.0",
+    "@types/react": "18.3.5",
+    "@types/react-dom": "18.3.0",
+    "@typescript-eslint/eslint-plugin": "7.18.0",
+    "@typescript-eslint/parser": "7.18.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "eslint": "8.57.0",
+    "eslint-plugin-react-hooks": "4.6.2",
+    "eslint-plugin-react-refresh": "0.4.11",
+    "jsdom": "25.0.1",
+    "typescript": "5.5.4",
+    "vite": "8.3.2",
+    "vitest": "4.1.11"
+  }
+}

@@ -1,0 +1,140 @@
+version: 2
+updates:
+  # ==========================================================================
+  # npm (frontend)
+  # ==========================================================================
+  # Routine dependency updates include patch and minor releases, but never
+  # standalone major bumps. Major upgrades are handled as deliberate,
+  # coherent migrations, especially for peer-coupled packages.
+  #
+  # `applies-to` is not a valid key inside `ignore` entries (it is only valid
+  # on a `groups` rule).
+  #
+  # Security updates are handled separately by Dependabot's security-update
+  # mechanism. If a vulnerability can only be fixed by a breaking release,
+  # that update requires a deliberate migration rather than being treated as
+  # a routine dependency bump.
+  #
+  # Peer-coupled packages are grouped so a single PR always moves the whole
+  # set together, keeping `main` installable between merges.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels:
+      - dependencies
+      - security
+    groups:
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      eslint:
+        patterns:
+          - "eslint"
+          - "eslint-plugin-*"
+          - "@typescript-eslint/*"
+      bundler:
+        patterns:
+          - "vite"
+          - "vitest"
+          - "@vitejs/plugin-react"
+          - "jsdom"
+      tauri:
+        patterns:
+          - "@tauri-apps/*"
+      other:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+          - "eslint"
+          - "eslint-plugin-*"
+          - "@typescript-eslint/*"
+          - "vite"
+          - "vitest"
+          - "@vitejs/plugin-react"
+          - "jsdom"
+          - "@tauri-apps/*"
+    ignore:
+      # No standalone major updates for routine dependency updates.
+      # Minor and patch updates are allowed by default.
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+
+      # Treat this dependency as patch-only because minor releases are
+      # considered potentially breaking for this project.
+      - dependency-name: "eslint-plugin-react-refresh"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
+
+      # TypeScript minor releases are intentionally treated as breaking
+      # changes for this project.
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
+
+  # ==========================================================================
+  # cargo (Tauri backend)
+  # ==========================================================================
+  # Routine dependency updates include patch and minor releases, but never
+  # standalone major bumps. Minor releases of 0.x crates may contain breaking
+  # changes, so CI is expected to validate these updates before merging.
+  - package-ecosystem: cargo
+    directory: "/src-tauri"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security
+    groups:
+      candle:
+        patterns:
+          - "candle-*"
+          - "tokenizers"
+      tauri:
+        patterns:
+          - "tauri"
+          - "tauri-*"
+      other:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "candle-*"
+          - "tokenizers"
+          - "tauri"
+          - "tauri-*"
+    ignore:
+      # No standalone major updates for routine dependency updates.
+      # Minor and patch updates are allowed by default.
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+
+  # ==========================================================================
+  # github-actions (build toolchain)
+  # ==========================================================================
+  # Action majors are checked by the pipeline itself, so they are allowed and
+  # grouped into one PR to cut noise.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - ci
+    groups:
+      actions:
+        patterns:
+          - "*"
