@@ -71,8 +71,13 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: npm run tauri build -- --target ${{ matrix.rust_target }} --no-bundle
 
-      # macOS ships as one universal .app (Intel + Apple Silicon), ad-hoc signed
-      # and packed with `ditto` below into a single portable archive.
+      # macOS ships as one universal .app (Intel + Apple Silicon), packed with
+      # `ditto` below into a single portable archive. The app is ad-hoc signed by
+      # Tauri itself (`bundle.macOS.signingIdentity` = "-" in tauri.conf.json),
+      # which signs nested binaries in the correct order. Do *not* re-sign it
+      # afterwards with `codesign --deep`: post-hoc deep signing can leave a seal
+      # that fails strict verification, and a broken seal is what macOS reports
+      # as "CandiShelf is damaged".
       - name: Build universal app bundle (macOS)
         if: matrix.os == 'macos-latest'
         run: npm run tauri build -- --target universal-apple-darwin --bundles app
@@ -104,13 +109,11 @@ jobs:
               exit 1
             fi
 
-            # No Developer ID is configured, so sign ad-hoc. A downloaded app
-            # with no *bundle* signature is reported by Gatekeeper as "damaged";
-            # an ad-hoc signature replaces that with a one-time "unidentified
-            # developer" prompt the user can allow. (Installer-free distribution
-            # cannot avoid that prompt without Developer ID + notarization.)
-            codesign --force --deep --sign - --timestamp=none "$APP"
-            codesign --verify --deep --verbose=2 "$APP"
+            # No Developer ID is configured, so the app is only ad-hoc signed
+            # (by Tauri during the build). Verify the seal strictly *before*
+            # archiving: an invalid signature would reach the user as
+            # "CandiShelf is damaged", even after the quarantine flag is cleared.
+            codesign --verify --deep --strict --verbose=2 "$APP"
 
             # One download must run on both architectures: assert the two slices
             # really were merged by the universal build.
@@ -134,6 +137,16 @@ jobs:
             # guard against a nested-folder layout.
             unzip -Z1 "$ASSET_PATH" | grep -q '^CandiShelf\.app/'
             echo "Archive root contains CandiShelf.app"
+
+            # Prove the signature survives archiving: unpack the exact asset we
+            # ship and verify the seal on the extracted copy. This catches damage
+            # introduced by the archiver (`ditto`) rather than by signing, which
+            # would otherwise only surface on the user's Mac as "damaged".
+            VERIFY_DIR=$(mktemp -d)
+            ditto -x -k "$ASSET_PATH" "$VERIFY_DIR"
+            codesign --verify --deep --strict --verbose=2 \
+              "$VERIFY_DIR/CandiShelf.app"
+            rm -rf "$VERIFY_DIR"
           fi
 
           echo "===== release asset ====="
@@ -185,11 +198,16 @@ jobs:
           | macOS (Intel + Apple Silicon) | `candishelf-macOS-Universal.zip` |
 
           Windows runs directly from the `.exe`. The macOS `.zip` unpacks straight
-          to `CandiShelf.app` — unzip it and open the app. The app is not
-          notarized, so on first launch Gatekeeper asks once; allow it via
-          **System Settings → Privacy & Security → Open Anyway** (or right-click
-          the app → **Open**). AI models are downloaded on first launch
-          (checksum-verified). After that, everything works offline.
+          to `CandiShelf.app` — unzip it and open the app. The app is ad-hoc
+          signed but not notarized, so on first launch macOS may report it as
+          **damaged** — that is Gatekeeper's quarantine check on downloads, not a
+          corrupt file. Right-click → Open does not bypass it on macOS 15+.
+          Allow it once via **System Settings → Privacy & Security → Open
+          Anyway** (the button appears after the first launch attempt), or clear
+          the flag from Terminal:
+          `xattr -dr com.apple.quarantine /Applications/CandiShelf.app`. AI
+          models are downloaded on first launch (checksum-verified). After that,
+          everything works offline.
           HEADER
 
           {

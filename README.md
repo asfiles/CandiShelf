@@ -264,16 +264,19 @@ one **universal** `.zip` (Intel + Apple Silicon) that unpacks straight to
 - **Tags `v*.*.*`** produce a production release with checksummed portable files.
 
 macOS and Windows builds are not code-signed, so macOS Gatekeeper and Windows
-SmartScreen may warn on first launch. The macOS app is ad-hoc signed, so on first
-launch Gatekeeper asks once — allow it via **System Settings → Privacy &
-Security → Open Anyway** (or right-click the app → **Open**). From Terminal you
-can instead clear the download flag:
+SmartScreen may warn on first launch. The macOS app is ad-hoc signed but **not
+notarized**, so on first launch macOS may report it as **"CandiShelf is damaged
+and can't be opened"** — this is Gatekeeper's quarantine check on downloaded
+files, not a corrupt archive. Note that right-click → **Open** no longer bypasses
+it on macOS 15 (Sequoia); allow it once via **System Settings → Privacy &
+Security → Open Anyway** (the button appears after the first launch attempt), or
+clear the download flag from Terminal:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/CandiShelf.app
 ```
 
-Removing the Gatekeeper prompt entirely requires a paid Apple Developer ID and
+Removing the Gatekeeper check entirely requires a paid Apple Developer ID and
 notarization.
 
 ### Cutting a release

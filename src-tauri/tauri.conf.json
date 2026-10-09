@@ -48,7 +48,8 @@
     "shortDescription": "Local resume shelf for recruiters",
     "longDescription": "CandiShelf loads a collection of resumes, extracts candidate information, builds a local database, and lets you run semantic search and match candidates to a job — all fully offline. No resume ever leaves your machine.",
     "macOS": {
-      "minimumSystemVersion": "10.15"
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": "-"
     }
   }
 }
