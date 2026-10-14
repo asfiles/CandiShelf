@@ -76,8 +76,6 @@ The home screen: your searchable shelf, filters, the shortlist, and CSV export.
 
 <!-- Screenshot: candidates list -->
 ![Candidates screen](screenshots/en/02-candidates.png)
-<!-- Screenshot: expanded filters -->
-![Filters](screenshots/en/03-filters.png)
 
 ## 3. Candidate card
 
@@ -100,9 +98,6 @@ the full extracted text.
 - A warning at the top flags a **possible duplicate** and names the other
   candidate(s).
 
-<!-- Screenshot: candidate card -->
-![Candidate card](screenshots/en/04-candidate-card.png)
-
 ## 4. Import
 
 Add PDF, DOCX, or TXT resumes to your shelf.
@@ -117,7 +112,7 @@ Add PDF, DOCX, or TXT resumes to your shelf.
   available if you later move them.
 
 <!-- Screenshot: import -->
-![Import screen](screenshots/en/05-import.png)
+![Import screen](screenshots/en/03-import.png)
 
 ## 5. Match to job
 
@@ -132,7 +127,7 @@ Rank candidates against a vacancy.
   automatically.
 
 <!-- Screenshot: match -->
-![Match to job](screenshots/en/06-match.png)
+![Match to job](screenshots/en/04-match.png)
 
 ## 6. Settings
 
@@ -155,9 +150,7 @@ Rank candidates against a vacancy.
   and embeddings (models are kept); it asks for confirmation.
 
 <!-- Screenshot: settings -->
-![Settings](screenshots/en/07-settings.png)
-<!-- Screenshot: AI models -->
-![AI models](screenshots/en/08-models.png)
+![Settings](screenshots/en/05-settings.png)
 
 ## 7. About
 
@@ -167,7 +160,7 @@ Rank candidates against a vacancy.
 - **Data** — where your database and models are stored.
 
 <!-- Screenshot: about -->
-![About](screenshots/en/09-about.png)
+![About](screenshots/en/06-about.png)
 
 ---
 
