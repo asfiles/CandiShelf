@@ -20,7 +20,14 @@ CandiShelf загружает коллекцию резюме, извлекае�
 > рекомендации для HR-специалиста, но никогда не отклоняет и не принимает
 > кандидатов автоматически.
 
----
+## Скачать
+https://github.com/asfiles/CandiShelf/releases
+| ОС | Файл |
+| --- | --- |
+| Windows 10/11 x64 | `candishelf-Windows-x64.exe` |
+| macOS (Intel + Apple Silicon) | `candishelf-macOS-Universal.zip` |
+
+
 
 ## Функционал
 

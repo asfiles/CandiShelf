@@ -18,7 +18,13 @@ runs offline from then on.
 > CandiShelf is a candidate shelf, not an ATS. It gives recommendations for a
 > human recruiter to act on; it never auto-rejects or auto-hires anyone.
 
----
+
+## Download
+https://github.com/asfiles/CandiShelf/releases
+| Platform | File |
+| --- | --- |
+| Windows 10/11 x64 | `candishelf-Windows-x64.exe` |
+| macOS (Intel + Apple Silicon) | `candishelf-macOS-Universal.zip` |
 
 ## Features
 
