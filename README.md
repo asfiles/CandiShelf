@@ -26,8 +26,6 @@ https://github.com/asfiles/CandiShelf/releases
 | Windows 10/11 x64 | `candishelf-Windows-x64.exe` |
 | macOS (Intel + Apple Silicon) | `candishelf-macOS-Universal.zip` |
 
----
-
 ## Features
 
 **Import**
